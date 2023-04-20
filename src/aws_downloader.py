@@ -60,7 +60,7 @@ def generate_parser(parser=None):
     parser.add_argument(
         '-m', 
         '--modalities',
-#        choices=MODALITIES,
+#       choices=MODALITIES,
 #        nargs='+',
         dest='modalities',
         default=MODALITIES,
@@ -95,7 +95,6 @@ def main(argv=sys.argv):
     num_nback = 0
     num_t2 = 0
     num_dti = 0
-
 
     series_csv = args.qc_csv
     if args.subject_list:
@@ -191,7 +190,7 @@ def main(argv=sys.argv):
                     f.write('\n'.join(str(s3_link) for s3_link in file_paths))
 
                 # Download s3 links from txt file with downloadcmd
-                subprocess.run([os.path.expanduser(args.downloadcmd), '-dp', args.package_id, '-t', s3_links_file, '-d', tgz_dir])
+                subprocess.run(['downloadcmd', '-dp', args.package_id, '-t', s3_links_file, '-d', tgz_dir])
 
                 
     print("There are %s subject visits" % num_sub_visits)
@@ -306,7 +305,7 @@ def add_dwi_paths(passed_QC_group, file_paths):
                 return (file_paths, 0)
             DTI_FM_PA_df = passed_QC_group.loc[passed_QC_group['image_description'] == 'ABCD-Diffusion-FM-PA']
             DTI_FM_df = DTI_FM_AP_df.tail(1)
-            DTI_FM_df = DTI_FM_df.append(DTI_FM_PA_df.tail(1))
+            DTI_FM_df = pd.concat([DTI_FM_df, DTI_FM_PA_df.tail(1)])
         if not DTI_FM_df.empty:
             for file_path in DTI_df['image_file']:
                 file_paths += [file_path]
