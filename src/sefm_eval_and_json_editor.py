@@ -214,6 +214,7 @@ def seperate_concatenated_fm(bids_layout, subject, session, fsl_dir, debug=False
    
     return
 
+
 def edit_dwi_jsons(layout, subject, sessions):
     print('Editing DWI sidecar jsons')
     all_json_paths = []
@@ -234,8 +235,8 @@ def edit_dwi_jsons(layout, subject, sessions):
     assert(len(AP_json) == 1)
     AP_json_path = "/".join([AP_json[0].dirname, AP_json[0].filename])
     all_json_paths += [AP_json_path]
-
     insert_edit_json(AP_json_path, 'IntendedFor', rel_dwi_paths)
+    insert_edit_json(AP_json_path, 'B0FieldIdentifier', 'abcd_dwi_identifier')
     insert_edit_json(AP_json_path, 'PhaseEncodingDirection', 'j-')
     
     # We are not using the PA even if one is included
@@ -243,12 +244,12 @@ def edit_dwi_jsons(layout, subject, sessions):
     if PA_json:
         PA_json_path = "/".join([PA_json[0].dirname, PA_json[0].filename])
         all_json_paths += [PA_json_path]
-        insert_edit_json(PA_json_path, 'IntendedFor',[])
+        insert_edit_json(PA_json_path, 'IntendedFor', [])
         insert_edit_json(PA_json_path, 'PhaseEncodingDirection', 'j')
 
-        insert_edit_json(PA_json_path, 'PhaseEncodingDirection', 'j')
+    # Adding B0FieldIdentifier to dwi json sidecar.
+    insert_edit_json(os.path.join(dwi_dir, dwi_json), 'B0FieldIdentifier', 'abcd_dwi_identifier')
 
-    
     for json_path in all_json_paths:
         nii_path = json_path.replace('.json', '.nii.gz')
         dwi_metadata = layout.get_metadata(nii_path)
