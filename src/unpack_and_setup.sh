@@ -96,7 +96,8 @@ dcm2bids -d ${TempSubjectDir}/DCMs/${SUB} -p ${participant} -s ${session} -c ${A
 
 # replace bvals and bvecs with files supplied by the NDA
 if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
-    first_dcm=`ls ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi/*/*.dcm | head -n1`
+    first_dcm=$(find "${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi/" -mindepth 2 -type f -name '*.dcm' | sort | head -n1)
+
     echo "Replacing bvals and bvecs with files supplied by the NDA"
     for dwi in ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/${SUB}_${VISIT}*.nii.gz; do
         orig_bval=`echo $dwi | sed 's|.nii.gz|.bval|'`
