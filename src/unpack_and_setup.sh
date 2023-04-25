@@ -58,7 +58,7 @@ if [ ! -d ${ScratchSpaceDir} ]; then
     # chown :fnl_lab ${ScratchSpaceDir} || true 
     chmod 770 ${ScratchSpaceDir} || true
 fi
-RandomHash=`cat /dev/urandom | tr -cd 'a-f0-9' | head -c 16`
+RandomHash=$(printf '%s' $(echo "$RANDOM" | md5sum) | cut -c 1-16)
 TempSubjectDir=${ScratchSpaceDir}/${RandomHash}
 mkdir -p ${TempSubjectDir}
 # chown :fnl_lab ${TempSubjectDir} || true
