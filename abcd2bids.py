@@ -296,9 +296,22 @@ def get_cli_args():
         type=str,
         dest="sif_path",
         default=None,
-        help=("Use singularity and path the .sif file")
+        help="Use singularity and path the .sif file"
     )
-
+    # Adding an argument group to broaden the use of this repo to ABCD Release 4.0
+    rel4 = parser.add_argument_group('Additional options if the data comes from ABCD Release 4.0.')
+    rel4.add_argument(
+        "--qc_release4",
+        type=validate_readable_file,
+        help=("Qc file from the ABCD Release 4.0 (format is different from previous releases,"
+              "the s3 links are not provided within the QC spreadsheet. It is mandatory to also"
+              "provide the image03.txt spreadsheet in the --image03 arguments.")
+    )
+    rel4.add_argument(
+        "--image03",
+        type=validate_readable_file,
+        help="Spreadsheet containing all amazon S3 links to raw tgz files for ABCD Release 4.0."
+    )
     # Parse, validate, and return all CLI args
     return validate_cli_args(parser.parse_args(), parser)
 
