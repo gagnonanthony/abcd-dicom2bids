@@ -77,7 +77,7 @@ def main(argv=sys.argv):
 
             if ext == '.json':
                 json_path = os.path.join(root, filename)
-                #print(json_path)
+                print(json_path)
 
                 with open(json_path, 'r') as f:
                     try:
@@ -108,7 +108,7 @@ def main(argv=sys.argv):
                 if 'fmap' in root and 'IntendedFor' in data and len(data['IntendedFor']) > 0:
                     # Regular expression replace all paths in that list with a relative path to ses-SESSION
                     intended_list = data['IntendedFor']
-                    corrected_intended_list = [re.sub(r'.*(ses-.*_ses-.+)','\g<1>',entry) for entry in intended_list]
+                    corrected_intended_list = [re.sub(r'.*(bids.*_ses-.+)', '\g<1>',entry) for entry in intended_list]
                     update_json_field(json_path, 'IntendedFor', corrected_intended_list)
 
                 # Remove SliceTiming field from func JSONs
