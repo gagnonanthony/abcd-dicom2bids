@@ -214,7 +214,7 @@ echo `date`" :COPYING BIDS DATA BACK: ${ROOT_BIDSINPUT}"
 TEMPBIDSINPUT=${TempSubjectDir}/BIDS_unprocessed/${SUB}
 if [ -d ${TEMPBIDSINPUT} ] ; then
     echo `date`" :CHMOD BIDS INPUT"
-    chmod g+rw -R ${TEMPBIDSINPUT} || true
+    chmod -R g+rw "${TEMPBIDSINPUT}" || true
     echo `date`" :COPY BIDS INPUT"
     mkdir -p ${ROOT_BIDSINPUT}
     cp -r ${TEMPBIDSINPUT} ${ROOT_BIDSINPUT}/
@@ -224,7 +224,7 @@ ROOT_SRCDATA=${ROOT_BIDSINPUT}/sourcedata
 TEMPSRCDATA=${TempSubjectDir}/BIDS_unprocessed/sourcedata/${SUB}
 if [ -d ${TEMPSRCDATA} ] ; then
     echo `date`" :CHMOD SOURCEDATA"
-    chmod g+rw -R ${TEMPSRCDATA} || true
+    chmod -R g+rw "${TEMPSRCDATA}" || true
     echo `date`" :COPY SOURCEDATA"
     mkdir -p ${ROOT_SRCDATA}
     cp -r ${TEMPSRCDATA} ${ROOT_SRCDATA}/
