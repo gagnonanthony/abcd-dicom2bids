@@ -225,7 +225,8 @@ def edit_dwi_jsons(layout, subject, sessions):
         dwi_json = dwi_fn.replace('.nii.gz', '.json')
         all_json_paths += [os.path.join(dwi_dir, dwi_json)]
         rel_path = "/".join(dwi_dir.split("/")[-3:] + [dwi_fn])
-        rel_dwi_paths += [rel_path]
+        bids_uri = "bids::" + rel_path # Using the new BIDS URI since the subject relative paths option is deprecated.
+        rel_dwi_paths += [bids_uri]
 
     # There should currently only be a single dwi fmap TODO: allow for multiple fmaps
     AP = layout.get(subject=subject, session=sessions, datatype='fmap', acquisition='dwi', direction='AP', extension='.nii.gz')
