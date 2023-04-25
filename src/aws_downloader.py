@@ -128,7 +128,7 @@ def main(argv=sys.argv):
         writer = csv.writer(f)
 
         # Read csv as pandas dataframe, drop duplicate entries, sort, and group by subject/visit
-        series_df = pd.read_csv(series_csv)
+        series_df = pd.read_csv(series_csv, dtype=object)
 
         # If subject list is provided
         # Get list of all unique subjects if not provided
