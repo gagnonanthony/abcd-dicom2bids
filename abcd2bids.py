@@ -677,7 +677,8 @@ def download_nda_data(cli_args):
                             "--sessions", ','.join(cli_args.sessions),
                             "--modalities", ','.join(cli_args.modalities),
                             "--downloadcmd", cli_args.downloadcmd,
-                            "--package-id", cli_args.package_id))
+                            "--package-id", cli_args.package_id,
+                            "--username", cli_args.username))
 
 
 def unpack_and_setup(args):

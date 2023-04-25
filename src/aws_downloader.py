@@ -23,6 +23,7 @@ QC_CSV = os.path.join(os.path.dirname(os.path.dirname(
 YEARS = ['baseline_year_1_arm_1', '2_year_follow_up_y_arm_1']
 MODALITIES = ['anat', 'func', 'dwi']
 
+
 def generate_parser(parser=None):
 
     if not parser:
@@ -79,6 +80,12 @@ def generate_parser(parser=None):
         required=True,
         help="ID of the fasttrack qc data package that is created on the NDA"
 )
+    parser.add_argument(
+        '-u',
+        '--username',
+        dest='username',
+        help='NDA username to use for login in the downloadcmd command.'
+    )
 
     return parser
 
@@ -190,7 +197,7 @@ def main(argv=sys.argv):
                     f.write('\n'.join(str(s3_link) for s3_link in file_paths))
 
                 # Download s3 links from txt file with downloadcmd
-                subprocess.run(['downloadcmd', '-dp', args.package_id, '-t', s3_links_file, '-d', tgz_dir])
+                subprocess.run(['downloadcmd', '-dp', args.package_id, '-u', args.username, '-t', s3_links_file, '-d', tgz_dir])
 
                 
     print("There are %s subject visits" % num_sub_visits)
