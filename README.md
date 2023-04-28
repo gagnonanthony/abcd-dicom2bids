@@ -18,6 +18,7 @@ Clone this repository, install requirements listed in `src/requirements.txt` ***
 1. [zlib's pigz-2.4](https://zlib.net/pigz) (`export` into your BASH `PATH` variable)
 1. Singularity or Docker (see documentation for [Docker Community Edition for Ubuntu](https://docs.docker.com/install/linux/docker-ce/ubuntu/))
 1. [FMRIB Software Library (FSL) v5.0](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation)
+1. [MRTrix3] (https://www.mrtrix.org/)
 
 We recommend creating a virtual environment for Python by running:
 
