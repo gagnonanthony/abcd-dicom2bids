@@ -447,10 +447,16 @@ def cleanup(temp_dir, exit_code):
     called when wrapper finishes successfully, then 0; otherwise 1.
     :return: N/A
     """
+    # Function to ignore extended attributes file (useful when running this repo on MacOS)
+    def ignore_extended_attributes(func, filename, exc_info):
+        is_meta_file = os.path.basename(filename).startswith("._")
+        if not (func is os.unlink and is_meta_file):
+            raise
+
     # Delete all temp folder subdirectories, but not the README in temp folder
     for temp_dir_subdir in os.scandir(temp_dir):
         if temp_dir_subdir.is_dir():
-            shutil.rmtree(temp_dir_subdir.path)
+            shutil.rmtree(temp_dir_subdir.path, onerror=ignore_extended_attributes)
 
     # Inform user that temporary files were deleted, then terminate wrapper
     print("\nTemporary files in {} deleted. ABCD to BIDS wrapper "
