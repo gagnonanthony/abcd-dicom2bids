@@ -95,6 +95,7 @@ dcm2bids -d ${TempSubjectDir}/DCMs/${SUB} -p ${participant} -s ${session} -c ${A
 
 
 # replace bvals and bvecs with files supplied by the NDA
+# TODO: Fixing handling of Phillips bvalues (both files need to be assigned to the correct run)
 if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
     first_dcm=$(find "${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi/" -mindepth 2 -type f -name '*.dcm' | sort | head -n1)
 
@@ -102,7 +103,7 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
     for dwi in ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/${SUB}_${VISIT}*.nii.gz; do
         orig_bval=`echo $dwi | sed 's|.nii.gz|.bval|'`
         orig_bvec=`echo $dwi | sed 's|.nii.gz|.bvec|'`
-        
+
         if [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *GE* ]]; then 
             if dcmdump --search 0018,1020 ${first_dcm} 2>/dev/null | grep -q DV25; then
                 echo "Replacing GE DV25 bvals and bvecs"
@@ -119,19 +120,34 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
                 exit
             fi
         elif [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *Philips* ]]; then
-            software_version=`dcmdump --search 0018,1020 ${first_dcm} 2>/dev/null | awk '{print $3}'`
-            if [[ ${software_version} == *5.3* ]]; then
-                echo "Replacing Philips s1 bvals and bvecs"
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvals_s1.txt ${orig_bval}
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvecs_s1.txt ${orig_bvec}
-            elif [[ ${software_version} == *5.4* ]]; then
-                echo "Replacing Philips s2 bvals and bvecs"
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvals_s2.txt ${orig_bval}
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvecs_s2.txt ${orig_bvec}
+            if [ -e "$dwi" ]; then
+                echo "Concatenating Phillips scans."
             else
-                echo "ERROR setting up DWI: Philips software version " ${software_version} " not recognized"
-                exit
+                echo "Phillips scans already concatenated. Skipping to next file."
+                break
             fi
+            concat_name=`echo $dwi | sed 's/_run-..//'`
+            new_json=`echo $dwi | sed 's/_run-..//' | sed 's|.nii.gz|.json|'`
+            run01=`cat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.json | jq -r '.SeriesNumber'`
+            run02=`cat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.json | jq -r '.SeriesNumber'`
+            if [[ run01 -lt run02 ]]; then
+                mrcat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.nii.gz \
+                      ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.nii.gz \
+                      ${concat_name}
+            else
+                mrcat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.nii.gz \
+                      ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.nii.gz \
+                      ${concat_name}
+            fi
+            cp ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.json $new_json
+            echo "Replacing Philips bvals and bvecs with the merged (s1 + s2) files."
+            merged_bval=`echo $concat_name | sed 's|.nii.gz|.bval|'`
+            merged_bvec=`echo $concat_name | sed 's|.nii.gz|.bvec|'`
+            cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvals_merged.txt ${merged_bval}
+            cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvecs_merged.txt ${merged_bvec}
+            echo "Removing non-concatenated files for each run."
+            rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01*
+            rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02*
         elif [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *SIEMENS* ]]; then
             echo "Replacing Siemens bvals and bvecs"
             cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Siemens_bvals.txt ${orig_bval}
