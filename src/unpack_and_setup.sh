@@ -14,6 +14,8 @@
 # pigz-2.4 (https://zlib.net/pigz)
 # run_order_fix.py (in this repo)
 # sefm_eval_and_json_editor.py (in this repo)
+# Mrtrix 3 (https://www.mrtrix.org/)
+# FSL
 
 # If output folder is given as a command line arg, get it; otherwise use
 # ./data as the default. Added by Greg 2019-06-06
@@ -94,6 +96,8 @@ echo `date`" :RUNNING dcm2bids"
 dcm2bids -d ${TempSubjectDir}/DCMs/${SUB} -p ${participant} -s ${session} -c ${ABCD2BIDS_DIR}/abcd_dcm2bids.conf -o ${TempSubjectDir}/BIDS_unprocessed --forceDcm2niix --clobber
 
 
+echo " " > ${TGZDIR}/log_id_failed_dwi_formatting.txt
+
 # replace bvals and bvecs with files supplied by the NDA
 if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
     first_dcm=$(find "${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi/" -mindepth 2 -type f -name '*.dcm' | sort | head -n1)
@@ -103,20 +107,40 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
         orig_bval=`echo $dwi | sed 's|.nii.gz|.bval|'`
         orig_bvec=`echo $dwi | sed 's|.nii.gz|.bvec|'`
 
-        if [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *GE* ]]; then 
-            if dcmdump --search 0018,1020 ${first_dcm} 2>/dev/null | grep -q DV25; then
-                echo "Replacing GE DV25 bvals and bvecs"
-                echo cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvals_DV25.txt ${orig_bval}
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvals_DV25.txt ${orig_bval}
-                echo cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvecs_DV25.txt ${orig_bvec}
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvecs_DV25.txt ${orig_bvec}
-            elif dcmdump --search 0018,1020 ${first_dcm} 2>/dev/null | grep -q DV26; then
-                echo "Replacing GE DV26 bvals and bvecs"
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvals_DV26.txt ${orig_bval}
-                cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvecs_DV26.txt ${orig_bvec}
-            else
-                echo "ERROR setting up DWI: GE software version not recognized"
-                exit
+        if [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *GE* ]]; then
+            echo "Replacing GE bvals and bvecs and splitting reverse b0s"
+            rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/*.bval
+            rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/*.bvec
+            fmap_AP=${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/*AP_epi.nii.gz
+            fmap_AP_json=`echo $fmap_AP | sed 's|.nii.gz|.json|'`
+            fmap_PA=`echo $fmap_AP | sed 's|AP|PA|'`
+            fmap_PA_json=`echo $fmap_PA | sed 's|.nii.gz|.json|'`
+            fslsplit $fmap_AP ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/vol -t
+            mv ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/vol0000.nii.gz ${fmap_AP}
+            mv ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/vol0001.nii.gz ${fmap_PA}
+            cp $fmap_AP_json $fmap_PA_json
+            rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/fmap/vol*
+            cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvals_DV25.txt ${orig_bval}
+            cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/GE_bvecs_DV25.txt ${orig_bvec}
+            nvols=`mrinfo -size $dwi | cut -f4 -d' '`
+            # Validating that the dwi file contains the right number of volume. This is necessary
+            # since software version 26 acquires one more b0 at the beginning than the software version
+            # 25.
+            if [ $nvols -eq 104 ]; then
+                echo "DWI file contains 104 volumes, removing the first one."
+                fslsplit $dwi ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/vol -t
+                # Remove first volume as it is the only one that differs from software version 25 and 26.
+                rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/vol0000.nii.gz
+                # Concatenating all volumes back together.
+                mrcat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/vol* $dwi -force
+                # Removing all single volumes file.
+                rm ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/vol*
+                # Validate the final number
+                nvols_f=`mrinfo -size $dwi | cut -f4 -d' '`
+                if [ $nvols_f -ne 103 ]; then
+                    echo "${SUB} failed to performed formatting, see log file in ${TGZDIR}"
+                    echo "${SUB} doesn't have the right number of volumes. Validate source data" >> ${TGZDIR}/log_id_failed_dwi_formatting.txt
+                fi
             fi
         elif [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *Philips* ]]; then
             if [ -e "$dwi" ]; then
@@ -154,6 +178,13 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
         else
             echo "ERROR setting up DWI: Manufacturer not recognized"
             exit
+        fi
+        # Validating that dwi file matches the number of bvalues in the sidecar file.
+        nvol=`mrinfo -size $dwi | cut -f4 -d' '`
+        nb_bval=$(wc -w < ${orig_bval})
+        if [ $nvol -ne $nb_bval ]; then
+          echo "ERROR: Number of bvalues doesn't match the number of volumes in dwi for ${SUB}. Please see the log file in ${TGZDIR}"
+          echo "${SUB} doesn't have matching bvalues and number of volumes in dwi." >> ${TGZDIR}log_id_failed_dwi_formatting.txt
         fi
     done
 fi
