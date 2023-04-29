@@ -143,29 +143,29 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
                 fi
             fi
         elif [[ `dcmdump --search 0008,0070 ${first_dcm} 2>/dev/null` == *Philips* ]]; then
-            if [ -e "$dwi" ]; then
+            if [[ -e $dwi ]]; then
                 echo "Concatenating Phillips scans."
             else
                 echo "Phillips scans already concatenated. Skipping to next file."
                 break
             fi
-            concat_name=`echo $dwi | sed 's/_run-..//'`
+            dwi=`echo $dwi | sed 's/_run-..//'`
             new_json=`echo $dwi | sed 's/_run-..//' | sed 's|.nii.gz|.json|'`
             run01=`cat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.json | jq -r '.SeriesNumber'`
             run02=`cat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.json | jq -r '.SeriesNumber'`
             if [[ run01 -lt run02 ]]; then
                 mrcat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.nii.gz \
                       ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.nii.gz \
-                      ${concat_name}
+                      ${dwi}
             else
                 mrcat ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-02_dwi.nii.gz \
                       ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.nii.gz \
-                      ${concat_name}
+                      ${dwi}
             fi
             cp ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*run-01_dwi.json $new_json
             echo "Replacing Philips bvals and bvecs with the merged (s1 + s2) files."
-            merged_bval=`echo $concat_name | sed 's|.nii.gz|.bval|'`
-            merged_bvec=`echo $concat_name | sed 's|.nii.gz|.bvec|'`
+            merged_bval=`echo $dwi | sed 's|.nii.gz|.bval|'`
+            merged_bvec=`echo $dwi | sed 's|.nii.gz|.bvec|'`
             cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvals_merged.txt ${merged_bval}
             cp `dirname $0`/ABCD_Release_2.0_Diffusion_Tables/Philips_bvecs_merged.txt ${merged_bvec}
             echo "Removing non-concatenated files for each run."
@@ -181,7 +181,7 @@ if [ -e ${TempSubjectDir}/DCMs/${SUB}/${VISIT}/dwi ]; then
         fi
         # Validating that dwi file matches the number of bvalues in the sidecar file.
         nvol=`mrinfo -size $dwi | cut -f4 -d' '`
-        nb_bval=$(wc -w < ${orig_bval})
+        nb_bval=$(wc -w < ${TempSubjectDir}/BIDS_unprocessed/${SUB}/${VISIT}/dwi/*.bval)
         if [ $nvol -ne $nb_bval ]; then
           echo "ERROR: Number of bvalues doesn't match the number of volumes in dwi for ${SUB}. Please see the log file in ${TGZDIR}"
           echo "${SUB} doesn't have matching bvalues and number of volumes in dwi." >> ${TGZDIR}log_id_failed_dwi_formatting.txt
