@@ -19,8 +19,8 @@ prog_descrip='AWS downloader'
 
 QC_CSV = os.path.join(os.path.dirname(os.path.dirname(
                     os.path.abspath(__file__))), "spreadsheets",
-                    "abcd_fastqc01_reformatted.csv") 
-YEARS = ['baseline_year_1_arm_1', '2_year_follow_up_y_arm_1']
+                    "abcd_file_for_download.csv")
+YEARS = ['baseline_year_1_arm_1', '2_year_follow_up_y_arm_1', '4_year_follow_up_y_arm_1']
 MODALITIES = ['anat', 'func', 'dwi']
 
 
@@ -86,8 +86,16 @@ def generate_parser(parser=None):
         dest='username',
         help='NDA username to use for login in the downloadcmd command.'
     )
+    parser.add_argument(
+        '--only_qc',
+        dest='only_qc',
+        choices=['true', 'false'],
+        default='false',
+        help='If true, will download only the files with QC == 1.'
+    )
 
     return parser
+
 
 def main(argv=sys.argv):
     parser = generate_parser()
@@ -123,6 +131,7 @@ def main(argv=sys.argv):
     print("     Number of Subjects  : {}".format(len(subject_list)))
     print("     Year                : {}".format(year_list))
     print("     Modalities          : {}".format(modalities))
+    print("     QC only             : {}".format(args.only_qc))
 
     with open(log, 'w') as f:
         writer = csv.writer(f)
@@ -145,7 +154,10 @@ def main(argv=sys.argv):
             subject_df = series_df[series_df['pGUID'] == pguid]
             for year in year_list:
                 sub_ses_df = subject_df[subject_df['EventName'] == year]
-                sub_pass_QC_df = sub_ses_df # changed to include all data, not just data with QC == 1.0
+                if args.only_qc == 'true':
+                    sub_pass_QC_df = sub_ses_df[sub_ses_df['QC'] == 1]
+                else:
+                    sub_pass_QC_df = sub_ses_df # changed to include all data, not just data with QC == 1.0
                 file_paths = []
                 ### Logging information
                 # initialize logging variables
