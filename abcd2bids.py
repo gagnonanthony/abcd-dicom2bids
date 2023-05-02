@@ -22,14 +22,17 @@ import argparse
 import configparser
 from cryptography.fernet import Fernet
 import datetime
+from detect_delimiter import detect
 from getpass import getpass
 import glob
 import os
 import pandas as pd
+import re
 import shutil
 import signal
 import subprocess
 import sys
+from tqdm import tqdm
 
 # Constant: List of function names of steps 1-5 in the list above
 STEP_NAMES = ["reformat_fastqc_spreadsheet", "download_nda_data",
@@ -180,7 +183,7 @@ def get_cli_args():
         "-q",
         "--qc",
         type=validate_readable_file,
-        default=SPREADSHEET_QC,
+        #default=SPREADSHEET_QC, # Muted in order to allow for ABCD Release 4 files.
         help=("Path to Quality Control (QC) spreadsheet file downloaded from "
               "the NDA. By default, this script will use {} as the QC "
               "spreadsheet.".format(SPREADSHEET_QC))
@@ -232,13 +235,20 @@ def get_cli_args():
         help=("List of the imaging modalities that should be downloaded for "
              "each subject. The default is to download all modalities. "
              "The possible selections are {}".format(MODALITIES))
-)    
+)
 
+    parser.add_argument(
+        '--only_qc',
+        dest='only_qc',
+        choices=['true', 'false'],
+        help='If true, only files with QC == 1 will be downloaded and converted.'
+    )
     # Optional: During unpack_and_setup, remove unprocessed data
     parser.add_argument(
         "-r",
         "--remove",
         action="store_true",
+        default='false',
         help=("After each subject's data has finished conversion, "
               "removed that subject's unprocessed data.")
     )
@@ -565,71 +575,156 @@ def make_config_file(config_filepath, username, password):
     subprocess.check_call(("chmod", "700", config_filepath))
 
 
+def matching_qc_and_url_files(qc_data, url_data):
+    """
+    When using ABCD release 4 QC file, the image URLs and pass/fail marks need to be combined
+    to be properly used. Please note that some subjects might not have available images in image03.txt
+    but have a passing QC evaluation.
+    :param      qc_data: File containing pass/fail marks for each acquisition.
+    :param      url_data: File containing links, timestamps, image description, etc.
+    :return     pandas.DataFrame containing QC marks and all relevant information for download.
+    """
+    # Create a dictionary to store the different column names and corresponding re patterns
+    pattern_dict = {
+        'ABCD-SST-fMRI': 'imgincl_sst_include',
+        'ABCD-MID-fMRI': 'imgincl_mid_include',
+        'ABCD-nBack-fMRI': 'imgincl_nback_include',
+        'ABCD-(DTI(_ABCD-Diffusion-[A-Z]{2}-[A-Z]{2})?|Diffusion(-(QA_)?(FM(_PA|_AP)?|DTI(_ABCD-Diffusion-(FM(_PA|_AP)?|QA)))?|QA_ABCD-Diffusion))': 'imgincl_dmri_include',
+        'ABCD-T1(_NORM)?': 'imgincl_t1w_include',
+        'ABCD-T2(_NORM)?(_ABCD-T2-NORM)?': 'imgincl_t2w_include',
+        'ABCD-fMRI-FM(-PA|-AP)?': 'fMRI_fieldmaps',
+        'ABCD-rsfMRI': 'imgincl_rsfmri_include'
+    }
+    # Extract the columns from the url_data DataFrame that we need to match with QC data
+    identifiers = url_data[['subjectkey', 'visit', 'image_description']]
+    print('{} acquisitions total, matching QC and URL data.'.format(
+        len(identifiers)))
+
+    # Use a dictionary to store QC marks and avoid the need to repeatedly query qc_data DataFrame
+    qc_dict = {}
+    # Loop through the QC data DataFrame and populate the qc_dict
+    for idx, row in qc_data.iterrows():
+        qc_dict[(row['subjectkey'], row['eventname'])] = row
+
+    QC_marks = []
+    # Loop through the identifiers DataFrame and retrieve the matching QC mark for each acquisition
+    for sub, event, sequence in tqdm(identifiers.itertuples(index=False)):
+        pattern = None
+        for p, col in pattern_dict.items():
+            if re.search(p, sequence):
+                pattern = col
+                break
+        if pattern is None:
+            QC_marks.append(0)
+        elif pattern == 'fMRI_fieldmaps':
+            QC_marks.append(1)
+        else:
+            qc_row = qc_dict.get((sub, event))
+            if qc_row is None:
+                QC_marks.append(0)
+            else:
+                QC_marks.append(int(qc_row[pattern]))
+
+    url_data['QC'] = QC_marks
+
+    return url_data
+
+
 def reformat_fastqc_spreadsheet(cli_args):
     """
     Create abcd_fastqc01_reformatted.csv by reformatting the original fastqc01.txt spreadsheet.
     :param cli_args: argparse namespace containing all CLI arguments.
     :return: N/A
-    """   
-    # Import QC data from .csv file
-    with open(cli_args.qc) as qc_file:
-        all_qc_data = pd.read_csv(
-            qc_file, encoding="utf-8-sig", sep=",|\t", engine="python",
-            index_col=False, header=0, skiprows=[1] # Skip row 2 (description)
-        )
-    
-    # Remove quotes from values and convert int-strings to ints
-    all_qc_data = all_qc_data.applymap(lambda x: x.strip('"')).apply(
-        lambda x: x.apply(lambda y: int(y) if y.isnumeric() else y)
-    )
-    
-    # Remove quotes from headers
-    new_headers = []
-    for header in all_qc_data.columns: # data.columns is your list of headers
-        header = header.strip('"') # Remove the quotes off each header
-        new_headers.append(header) # Save the new strings without the quotes
-    all_qc_data.columns = new_headers # Replace the old headers with the new list
-    print(all_qc_data.columns)
+    """
+    # Import QC data from ABCD report files.
+    if cli_args.qc_release4 is not None:
+        assert cli_args.image03 is not None, 'When using QC files from the 4th ABCD release, image03.txt needs to be' \
+                                             'provided in order for the script to fetch images URLs.'
+        print("Loading QC data from the 4th ABCD release.")
+        with open(cli_args.qc_release4, 'r') as f:
+            f = f.read()
+            delimiter = detect(f, whitelist=['\t', ' ', ';', ':', ','])
+        qc_data = pd.read_csv(cli_args.qc_release4, sep=delimiter, skiprows=[1], dtype=object)
 
-    # select all QC data, not just those with ftq_usable == 1
-    qc_data = fix_split_col(all_qc_data)
+        with open(cli_args.image03, 'r') as f:
+            f = f.read()
+            delimiter = detect(f, whitelist=['\t', ' ', ';', ':', ','])
+        url_data = pd.read_csv(cli_args.image03, sep=delimiter, skiprows=[1], dtype=object)
+        # Keeping only relevant columns to reduce memory usage.
+        url_data = url_data.loc[:, ['subjectkey', 'src_subject_id', 'interview_date', 'interview_age', 'sex',
+                                    'comments_misc', 'image_file', 'image_description', 'visit']]
 
-    def get_img_desc(row):
-        """
-        :param row: pandas.Series with a column called "ftq_series_id"
-        :return: String with the image_description of that row
-        """
-        return row.ftq_series_id.split("_")[2]
+        # Create a new column with the timestamp.
+        def get_img_timestamp(row):
+            """
+            :param row: pandas.DataFrame with a column called "image_file"
+            :return:    String with the image_description of that row.
+            """
+            timestamp_pattern = r'\d{14}'
+            match = re.search(timestamp_pattern, row.image_file)
 
-    # Add extra column by splitting data from other column
-    image_desc_col = qc_data.apply(get_img_desc, axis=1)
-    qc_data = qc_data.assign(**{'image_description': image_desc_col.values})
+            return match.group(0)
 
-    def get_img_timestamp(row):
-        """
-        :param row: pandas.Series with a column called "ftq_series_id"
-        :return: String with the image_description of that row
-        """
-        return row.ftq_series_id.split("_")[3]
+        image_timestamp_col = url_data.apply(get_img_timestamp, axis=1)
+        url_data = url_data.assign(**{'image_timestamp': image_timestamp_col})
 
-    # Add extra column by splitting data from other column
-    image_timestamp_col = qc_data.apply(get_img_timestamp, axis=1)
-    qc_data = qc_data.assign(**{'image_timestamp': image_timestamp_col.values})
+        # Merging QC and URL files.
+        url_data = matching_qc_and_url_files(qc_data, url_data)
 
-    # remove "Replaced" rows from download list
-    qc_data = qc_data[qc_data['ftq_recall_reason'] != 'Replaced']
+        url_data.rename({
+            "subjectkey": "pGUID", "visit": "EventName",
+            "interview_age": "SeriesTime",
+            "comments_misc": "SeriesDescription"
+        }, axis="columns").sort_values([
+            'pGUID',
+            'EventName',
+            'image_description',
+            'image_timestamp'
+        ]).to_csv(f'{cli_args.temp}/abcd_file_for_download.csv', index=False)
 
-    # Change column names for good_bad_series_parser to use; then save to .csv
-    qc_data.rename({
-        "ftq_usable": "QC", "subjectkey": "pGUID", "visit": "EventName",
-        "abcd_compliant": "ABCD_Compliant", "interview_age": "SeriesTime",
-        "comments_misc": "SeriesDescription", "file_source": "image_file"
-    }, axis="columns").sort_values([
-        'pGUID',
-        'EventName',
-        'image_description',
-        'image_timestamp'
-    ]).to_csv(f'{cli_args.temp}/abcd_fastqc01_reformatted.csv', index=False)
+    else:
+        print("Loading fast QC data from the 2nd ABCD release.")
+        with open(cli_args.qc, 'r') as f:
+            f = f.read()
+            delimiter = detect(f, whitelist=['\t', ' ', ';', ':', ','])
+        qc_data = pd.read_csv(cli_args.qc, sep=delimiter, skiprows=[1], dtype=object)
+
+        def get_img_desc(row):
+            """
+            :param row: pandas.Series with a column called "ftq_series_id"
+            :return: String with the image_description of that row
+            """
+            return row.ftq_series_id.split("_")[2]
+
+        # Add extra column by splitting data from other column
+        image_desc_col = qc_data.apply(get_img_desc, axis=1)
+        qc_data = qc_data.assign(**{'image_description': image_desc_col.values})
+
+        def get_img_timestamp(row):
+            """
+            :param row: pandas.Series with a column called "ftq_series_id"
+            :return: String with the image_description of that row
+            """
+            return row.ftq_series_id.split("_")[3]
+
+        # Add extra column by splitting data from other column
+        image_timestamp_col = qc_data.apply(get_img_timestamp, axis=1)
+        qc_data = qc_data.assign(**{'image_timestamp': image_timestamp_col.values})
+
+        # remove "Replaced" rows from download list
+        qc_data = qc_data[qc_data['ftq_recall_reason'] != 'Replaced']
+
+        # Change column names for good_bad_series_parser to use; then save to .csv
+        qc_data.rename({
+            "ftq_usable": "QC", "subjectkey": "pGUID", "visit": "EventName",
+            "abcd_compliant": "ABCD_Compliant", "interview_age": "SeriesTime",
+            "comments_misc": "SeriesDescription", "file_source": "image_file"
+        }, axis="columns").sort_values([
+            'pGUID',
+            'EventName',
+            'image_description',
+            'image_timestamp'
+        ]).to_csv(f'{cli_args.temp}/abcd_file_for_download.csv', index=False)
 
 
 def fix_split_col(qc_df):
