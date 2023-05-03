@@ -155,7 +155,7 @@ def main(argv=sys.argv):
             for year in year_list:
                 sub_ses_df = subject_df[subject_df['EventName'] == year]
                 if args.only_qc == 'true':
-                    sub_pass_QC_df = sub_ses_df[sub_ses_df['QC'] == 1]
+                    sub_pass_QC_df = sub_ses_df[sub_ses_df['QC'] == '1']
                 else:
                     sub_pass_QC_df = sub_ses_df # changed to include all data, not just data with QC == 1.0
                 file_paths = []

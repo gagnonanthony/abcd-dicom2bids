@@ -32,7 +32,6 @@ import shutil
 import signal
 import subprocess
 import sys
-from tqdm import tqdm
 
 # Constant: List of function names of steps 1-5 in the list above
 STEP_NAMES = ["reformat_fastqc_spreadsheet", "download_nda_data",
@@ -240,7 +239,7 @@ def get_cli_args():
     parser.add_argument(
         '--only_qc',
         dest='only_qc',
-        choices=['true', 'false'],
+        action='store_true',
         help='If true, only files with QC == 1 will be downloaded and converted.'
     )
     # Optional: During unpack_and_setup, remove unprocessed data
@@ -608,7 +607,7 @@ def matching_qc_and_url_files(qc_data, url_data):
 
     QC_marks = []
     # Loop through the identifiers DataFrame and retrieve the matching QC mark for each acquisition
-    for sub, event, sequence in tqdm(identifiers.itertuples(index=False)):
+    for sub, event, sequence in identifiers.itertuples(index=False):
         pattern = None
         for p, col in pattern_dict.items():
             if re.search(p, sequence):
@@ -768,6 +767,11 @@ def download_nda_data(cli_args):
     with downloaded NDA data.
     :return: N/A
     """
+    if cli_args.only_qc:
+        only_qc = 'true'
+    else:
+        only_qc = 'false'
+
     subprocess.check_call(("python3", "--version"))
     print(cli_args.modalities)
     subprocess.check_call(("python3", 
@@ -779,7 +783,8 @@ def download_nda_data(cli_args):
                             "--modalities", ','.join(cli_args.modalities),
                             "--downloadcmd", cli_args.downloadcmd,
                             "--package-id", cli_args.package_id,
-                            "--username", cli_args.username))
+                            "--username", cli_args.username,
+                            "--only_qc", only_qc))
 
 
 def unpack_and_setup(args):
