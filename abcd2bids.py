@@ -54,7 +54,7 @@ NDA_AWS_TOKEN_MAKER = os.path.join(PWD, "src", "ndar_update_keys.py")
 DOWNLOAD_CMD_PATH = os.path.join(os.path.expanduser("~"), ".local", "bin", "downloadcmd")
 
 SERIES_TABLE_PARSER = os.path.join(PWD, "src", "aws_downloader.py")
-SPREADSHEET_DOWNLOAD = os.path.join("abcd_fastqc01_reformatted.csv")
+SPREADSHEET_DOWNLOAD = os.path.join("abcd_file_for_download.csv")
 SPREADSHEET_QC = os.path.join(PWD, "spreadsheets", "abcd_fastqc01.txt")
 TEMP_FILES_DIR = os.path.join(PWD, "temp")
 UNPACK_AND_SETUP = os.path.join(PWD, "src", "unpack_and_setup.sh")
