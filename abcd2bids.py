@@ -667,6 +667,20 @@ def reformat_fastqc_spreadsheet(cli_args):
         image_timestamp_col = url_data.apply(get_img_timestamp, axis=1)
         url_data = url_data.assign(**{'image_timestamp': image_timestamp_col})
 
+        # Removing the .0 in the s3 links for all acquisitions as it makes the download crash.
+        def clean_s3_url(row):
+            """
+            :param row: pandas.DataFrame with a column called "image_file"
+            :return:    String with the correct s3 url of that row.
+            """
+            s = row.image_file
+            s = s.replace('.0', '')
+
+            return s
+
+        correct_url = url_data.apply(clean_s3_url, axis=1)
+        url_data = url_data.assign(**{'image_file': correct_url})
+
         # Merging QC and URL files.
         url_data = matching_qc_and_url_files(qc_data, url_data)
 
