@@ -268,6 +268,8 @@ fi
 
 ROOT_SRCDATA=${ROOT_BIDSINPUT}/sourcedata
 TEMPSRCDATA=${TempSubjectDir}/BIDS_unprocessed/sourcedata/${SUB}
+mkdir -p ${TEMPSRCDATA}
+cp -r ${TempSubjectDir}/*.tgz $TEMPSRCDATA/ # Copying raw tgz to sourcedata.
 if [ -d ${TEMPSRCDATA} ] ; then
     echo `date`" :CHMOD SOURCEDATA"
     chmod -R g+rw "${TEMPSRCDATA}" || true
@@ -275,5 +277,9 @@ if [ -d ${TEMPSRCDATA} ] ; then
     mkdir -p ${ROOT_SRCDATA}
     cp -r ${TEMPSRCDATA} ${ROOT_SRCDATA}/
 fi
+
+echo `date`" :REMOVING TEMP FILES"
+rm -rf ${TempSubjectDir} # This is much needed if user's disk quota is limited, otherwise it will exceed their allocation.
+
 
 echo `date`" :UNPACKING AND SETUP COMPLETE: ${SUB}/${VISIT}"
